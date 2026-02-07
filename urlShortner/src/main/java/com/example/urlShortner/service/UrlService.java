@@ -24,6 +24,9 @@ public class UrlService {
             return "Invalid URL";
         }
 
+        String domain = URI.create(originalUrl).getHost();
+        domainCount.put(domain, domainCount.getOrDefault(domain, 0) + 1);
+
         if (longToShort.containsKey(originalUrl)) {
             return longToShort.get(originalUrl);
         }
@@ -33,9 +36,6 @@ public class UrlService {
 
         longToShort.put(originalUrl, shortUrl);
         shortToLong.put(shortKey, originalUrl);
-
-        String domain = URI.create(originalUrl).getHost();
-        domainCount.put(domain, domainCount.getOrDefault(domain, 0) + 1);
 
         return shortUrl;
     }
