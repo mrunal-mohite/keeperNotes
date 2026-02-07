@@ -3,6 +3,9 @@ package com.example.urlShortner.controller;
 import com.example.urlShortner.service.UrlService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
 
 import java.util.Map;
 
@@ -19,9 +22,17 @@ public class UrlShortenerController {
     }
 
     @GetMapping("/{shortKey}")
-    public String redirectUrl(@PathVariable String shortKey) {
-        return urlService.getOriginalUrl(shortKey);
+    public void redirectUrl(@PathVariable String shortKey, HttpServletResponse response) throws IOException {
+        String originalUrl = urlService.getOriginalUrl(shortKey);
+
+        if (originalUrl != null) {
+            response.sendRedirect(originalUrl);
+        } else {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            response.getWriter().write("Short URL not found");
+        }
     }
+
 
     @GetMapping("/metrics")
     public Map<String, Integer> getTopDomains() {
