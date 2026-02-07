@@ -12,16 +12,17 @@ import java.util.Map;
 public class UrlService {
 
     private Map<String, String> longToShort = new HashMap<>();
-
     private Map<String, String> shortToLong = new HashMap<>();
-
     private Map<String, Integer> domainCount = new HashMap<>();
-
     private long counter = 1;
 
     private final String BASE_URL = "http://localhost:8081/api/";
 
     public String shortenUrl(String originalUrl) {
+
+        if (originalUrl == null || originalUrl.isEmpty()) {
+            return "Invalid URL";
+        }
 
         if (longToShort.containsKey(originalUrl)) {
             return longToShort.get(originalUrl);
