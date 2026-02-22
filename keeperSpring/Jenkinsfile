@@ -2,10 +2,9 @@ pipeline {
     agent any
 
     environment {
-        DOCKERHUB_USER = 'mrunaldocker75'
-        DOCKERHUB_PASS = credentials('dockerhub-credentials') // token-based login
-        IMAGE_NAME = 'keeperspring'
-        IMAGE_TAG = '12'
+        DOCKERHUB_USER = "mrunaldocker75"
+        IMAGE_NAME = "keeperspring"
+        IMAGE_TAG = "12"
     }
 
     stages {
@@ -16,36 +15,44 @@ pipeline {
             }
         }
 
+        stage('Build Jar') {
+            steps {
+                echo "Building Spring Boot jar..."
+                bat 'mvn clean package -f keeperSpring/pom.xml'
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 echo "Building Docker image..."
-                sh "docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG ."
-                sh "docker tag $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG $DOCKERHUB_USER/$IMAGE_NAME:latest"
+                // Assuming Dockerfile is inside keeperSpring/
+                bat "docker build -t %DOCKERHUB_USER%/%IMAGE_NAME%:%IMAGE_TAG% keeperSpring/"
             }
         }
 
         stage('Login & Push to DockerHub') {
             steps {
                 echo "Logging in to DockerHub..."
-                sh "echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin"
-
-                echo "Pushing Docker images..."
-                sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG"
-                sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:latest"
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    bat 'docker login -u %DOCKER_USER% -p %DOCKER_PASS%'
+                    echo "Pushing Docker image..."
+                    bat "docker push %DOCKER_USER%/%IMAGE_NAME%:%IMAGE_TAG%"
+                    bat 'docker logout'
+                }
             }
         }
     }
 
     post {
         always {
-            echo "Cleaning up..."
-            sh "docker logout"
-        }
-        success {
-            echo "Docker image pushed successfully!"
+            echo "Cleaning up workspace..."
+            cleanWs()
         }
         failure {
             echo "Pipeline failed."
+        }
+        success {
+            echo "Pipeline completed successfully!"
         }
     }
 }
