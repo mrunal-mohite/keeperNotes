@@ -15,6 +15,14 @@ pipeline {
             }
         }
 
+        stage('Build SpringRest') {
+            steps {
+                dir('springrest') { // Make sure the folder exists in the repo
+                    bat 'mvn clean install -DskipTests'
+                }
+            }
+        }
+
         stage('Build & Test') {
             steps {
                 dir('keeperSpring') {
