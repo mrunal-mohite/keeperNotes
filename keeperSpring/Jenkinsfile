@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'mrunaldocker75/keeperSpring'
+        DOCKER_IMAGE = 'mrunaldocker75/keeperspring'
         DOCKER_TAG = "${BUILD_NUMBER}"
     }
 
