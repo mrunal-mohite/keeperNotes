@@ -1,14 +1,9 @@
 pipeline {
     agent any
 
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '5'))
-        timeout(time: 60, unit: 'MINUTES')
-    }
-
     environment {
         DOCKERHUB_USER = 'mrunaldocker75'
-        DOCKERHUB_PASS = credentials('dockerhub-password') // Jenkins credential ID
+        DOCKERHUB_PASS = credentials('dockerhub-credentials') // token-based login
         IMAGE_NAME = 'keeperspring'
         IMAGE_TAG = '12'
     }
@@ -16,81 +11,41 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-                    echo "Checking out code..."
-                    checkout scm
-                }
+                echo "Checking out code..."
+                checkout scm
             }
         }
 
-        stage('Build') {
+        stage('Build Docker Image') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-                    echo "Building Spring Boot project..."
-                    sh 'mvn clean package -DskipTests'
-                }
+                echo "Building Docker image..."
+                sh "docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG ."
+                sh "docker tag $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG $DOCKERHUB_USER/$IMAGE_NAME:latest"
             }
         }
 
-        stage('Docker Build') {
+        stage('Login & Push to DockerHub') {
             steps {
-                wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-                    echo "Building Docker image..."
-                    sh """
-                        docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG .
-                        docker tag $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG $DOCKERHUB_USER/$IMAGE_NAME:latest
-                    """
-                }
-            }
-        }
+                echo "Logging in to DockerHub..."
+                sh "echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin"
 
-        stage('Docker Push') {
-            steps {
-                wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-                    echo "Pushing Docker image to DockerHub..."
-                    script {
-                        sh "echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin"
-
-                        // Retry logic for push (handles intermittent DockerHub errors)
-                        def retries = 3
-                        def delay = 10
-                        for (int i = 1; i <= retries; i++) {
-                            try {
-                                sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG"
-                                sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:latest"
-                                echo "Docker push succeeded on attempt ${i}"
-                                break
-                            } catch (Exception e) {
-                                echo "Docker push failed on attempt ${i}: ${e.getMessage()}"
-                                if (i == retries) {
-                                    error("Docker push failed after ${retries} attempts")
-                                }
-                                echo "Retrying in ${delay} seconds..."
-                                sleep(delay)
-                            }
-                        }
-                    }
-                }
+                echo "Pushing Docker images..."
+                sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG"
+                sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:latest"
             }
         }
     }
 
     post {
+        always {
+            echo "Cleaning up..."
+            sh "docker logout"
+        }
         success {
-            wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-                echo "Pipeline completed successfully!"
-            }
+            echo "Docker image pushed successfully!"
         }
         failure {
-            wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-                echo "Pipeline failed. Check logs for errors."
-            }
-        }
-        always {
-            wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
-                echo "Cleaning up workspace..."
-                cleanWs()
-            }
+            echo "Pipeline failed."
         }
     }
 }
