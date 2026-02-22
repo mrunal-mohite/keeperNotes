@@ -1,56 +1,70 @@
 pipeline {
     agent any
 
-    environment {
-        DOCKERHUB_USER = "mrunaldocker75"
-        DOCKERHUB_PASS = credentials('dockerhub-password') // Jenkins credential ID
-        IMAGE_NAME    = "${DOCKERHUB_USER}/keeperspring"
-        IMAGE_TAG     = "12"
+    options {
+        ansiColor('xterm')                    // Colored logs
+        buildDiscarder(logRotator(numToKeepStr: '5'))
+        timeout(time: 60, unit: 'MINUTES')    // Timeout if stuck
     }
 
-    options {
-        skipStagesAfterUnstable()
-        ansiColor('xterm')
-        timeout(time: 30, unit: MINUTES)
+    environment {
+        DOCKERHUB_USER = 'mrunaldocker75'
+        DOCKERHUB_PASS = credentials('dockerhub-password') // Jenkins credential ID
+        IMAGE_NAME = 'keeperspring'
+        IMAGE_TAG = '12'
     }
 
     stages {
-
-        stage('Build with Maven') {
+        stage('Checkout') {
             steps {
-                echo "Building the Spring Boot jar..."
+                echo "Checking out code..."
+                checkout scm
+            }
+        }
+
+        stage('Build') {
+            steps {
+                echo "Building Spring Boot project..."
                 sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Docker Build') {
             steps {
-                echo "Building Docker image using BuildKit..."
-                script {
-                    // Enable BuildKit
-                    sh 'export DOCKER_BUILDKIT=1'
-                    sh "docker build -t ${IMAGE_NAME}:${IMAGE_TAG} ."
-                    sh "docker tag ${IMAGE_NAME}:${IMAGE_TAG} ${IMAGE_NAME}:latest"
-                }
+                echo "Building Docker image..."
+                sh """
+                    docker build -t $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG .
+                    docker tag $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG $DOCKERHUB_USER/$IMAGE_NAME:latest
+                """
             }
         }
 
         stage('Docker Push') {
             steps {
-                echo "Logging in to DockerHub and pushing image..."
+                echo "Pushing Docker image to DockerHub..."
                 script {
-                    sh """
-                        echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin
-                        docker push ${IMAGE_NAME}:${IMAGE_TAG}
-                        docker push ${IMAGE_NAME}:latest
-                    """
+                    // Docker login
+                    sh "echo $DOCKERHUB_PASS | docker login -u $DOCKERHUB_USER --password-stdin"
+                    
+                    // Retry logic for push
+                    def retries = 3
+                    def delay = 10
+                    for (int i = 1; i <= retries; i++) {
+                        try {
+                            sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:$IMAGE_TAG"
+                            sh "docker push $DOCKERHUB_USER/$IMAGE_NAME:latest"
+                            echo "Docker push succeeded on attempt ${i}"
+                            break
+                        } catch (Exception e) {
+                            echo "Docker push failed on attempt ${i}: ${e.getMessage()}"
+                            if (i == retries) {
+                                error("Docker push failed after ${retries} attempts")
+                            }
+                            echo "Retrying in ${delay} seconds..."
+                            sleep(delay)
+                        }
+                    }
                 }
-            }
-        }
-
-        stage('Deploy') {
-            steps {
-                echo "Deployment stage (optional) - skipped if not defined"
             }
         }
     }
@@ -60,7 +74,11 @@ pipeline {
             echo "Pipeline completed successfully!"
         }
         failure {
-            echo "Pipeline failed - check logs."
+            echo "Pipeline failed. Check logs for errors."
+        }
+        always {
+            echo "Cleaning up workspace..."
+            cleanWs()
         }
     }
 }
